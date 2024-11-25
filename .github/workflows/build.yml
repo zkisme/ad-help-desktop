@@ -1,0 +1,53 @@
+name: Build Tauri App
+
+on:
+  push:
+    tags:
+      - 'v*'  # 触发条件：推送以v开头的标签，例如v1.0.0
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]  # 指定要构建的操作系统
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'  # 使用Node.js 16版本
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+
+      - name: Install dependencies
+        run: |
+          npm install -g yarn  # 安装yarn
+          yarn install  # 安装项目依赖
+
+      - name: Build Tauri App
+        run: |
+          yarn tauri build --target x86_64-pc-windows-msvc  # Windows构建
+          yarn tauri build --target x86_64-apple-darwin  # macOS构建
+
+      - name: Upload Windows artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: windows-build
+          path: target/release/bundle/msi/*.msi  # 根据你的项目结构调整路径
+
+      - name: Upload macOS artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: macos-build
+          path: target/release/bundle/app/*.app  # 根据你的项目结构调整路径
