@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import React, { useState } from "react";
 
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, rename, writeFile } from "@tauri-apps/plugin-fs";
+import { readDir, rename, writeFile, copyFile } from "@tauri-apps/plugin-fs";
 import {
   fileOpen,
   directoryOpen,
@@ -69,7 +69,7 @@ export const columns: ColumnDef<FileList>[] = [
     accessorKey: "_id",
     header: "序号",
     cell: ({ row }) => (
-      <div className="capitalize">{Number(row.getValue("_id")) + 1}</div>
+      <div className="capitalize">{Number(row.getValue("_id"))}</div>
     ),
   },
   {
@@ -116,14 +116,13 @@ function BatchExtractID() {
   });
 
   const handleFolderSelect = async () => {
-    const file = await open({
+    const dirPath = await open({
       multiple: false,
       directory: true,
     });
     toast.loading("正在读取文件夹...")
-    console.log(1111, file);
-    setDirPath(file as string);
-    await readFileList(file as string);
+    setDirPath(dirPath as string);
+    await readFileList(dirPath as string);
     toast.dismiss()
   };
 
@@ -141,7 +140,7 @@ function BatchExtractID() {
       .sort((a, b) => Number(a.id) - Number(b.id))
       .map((file, index) => ({
         ...file,
-        _id: index,
+        _id: index + 1,
       }));
 
     setFileList(files);
@@ -156,9 +155,9 @@ function BatchExtractID() {
       const pArr = fileList.map((file) => {
         return rename(
           `${dirPath}/${file.name}`,
-          `${dirPath}/${parseInt(file._id, 10)}-${file.name}`
+          `${dirPath}/${file._id}-${file.name}`
         ).then(() => {
-          file.name = `${parseInt(file._id, 10) + 1}-${file.name}`;
+          file.name = `${file._id}-${file.name}`;
         });
       });
       Promise.all(pArr).then(() => {
@@ -167,10 +166,41 @@ function BatchExtractID() {
         setFileList([...fileList]);
         toast.dismiss(toastId)
         toast.success("添加序号成功")
+      }).catch(error => {
+        toast.dismiss(toastId)
+        toast.error(`添加序号失败:${error?.message || error}`)
       });
     }, 100)
-    
   };
+
+  const handleAddSerialNumberCopy = async () => {
+    const _dirPath = await open({
+      multiple: false,
+      directory: true,
+    });
+    if(!_dirPath) return
+    const toastId = toast.loading("正在添加序号...")
+    setTimeout(() => {
+      const pArr = fileList.map((file) => {
+        return copyFile(
+          `${dirPath}/${file.name}`,
+          `${_dirPath}/${file._id}-${file.name}`
+        ).then(() => {
+          file.name = `${file._id}-${file.name}`;
+        });
+      });
+      Promise.all(pArr).then(() => {
+        console.log("rename success");
+        // readFileList(dirPath)
+        setFileList([...fileList]);
+        toast.dismiss(toastId)
+        toast.success("添加序号并复制成功")
+      }).catch(error => {
+        toast.dismiss(toastId)
+        toast.error(`添加序号并复制失败:${error?.message || error}`)
+      });
+    }, 100)
+  }
 
   const handleExtractID = async () => {
     try {
@@ -190,7 +220,7 @@ function BatchExtractID() {
       toast.loading("正在导出ID...")
       // 实现提取 ID 并保存到 Excel 的逻辑
       // 这可能需要使用相关的 Excel 处理库
-      const blob = await exportToExcel(fileList);
+      const blob = await exportToExcel(fileList.map(file => ({id: file.id, serial: file._id, name: file.name})));
 
       // 将Blob数据写入文件
       const buffer = await blob.arrayBuffer();
@@ -212,7 +242,8 @@ function BatchExtractID() {
           <Button className="" onClick={handleFolderSelect}>
             选择文件夹
           </Button>
-          <Button onClick={handleAddSerialNumber}>批量添加序号</Button>
+          <Button onClick={handleAddSerialNumber}>添加序号(覆盖)</Button>
+          <Button onClick={handleAddSerialNumberCopy}>添加序号(复制)</Button>
           <Button onClick={handleExtractID}>导出ID</Button>
         </div>
         <div className="flex items-center justify-end space-x-2 py-4">
